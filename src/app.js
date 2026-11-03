@@ -93,6 +93,10 @@
         api.modules.overlay.ensure();
 
         const attempt = () => {
+            // The script runs at document-start, so body may not exist yet.
+            // Retry overlay creation as well as game discovery.
+            api.modules.overlay.ensure();
+
             const hooked = installPhaserHook();
             if (!api.game) {
                 const game = api.findExistingGame();

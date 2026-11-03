@@ -1,6 +1,6 @@
 # Tank Trouble World Reader
 
-Version 0.8.1 — modular, read-only overlay for Tank Trouble.
+Version 0.8.2 — modular, read-only overlay for Tank Trouble.
 
 ## Install
 
@@ -9,7 +9,7 @@ Version 0.8.1 — modular, read-only overlay for Tank Trouble.
 3. Copy its contents into a new Tampermonkey userscript and save it.
 4. Refresh Tank Trouble.
 
-The loader uses Tampermonkey's `@require` metadata to retrieve the seven modules from this public repository in dependency order. This avoids injecting remote `<script>` elements into the game page, which can be blocked by the page's Content-Security-Policy. No GitHub login or token is required.
+The loader uses Tampermonkey's `@require` metadata to retrieve the seven modules from this public repository in dependency order. The overlay is retried until the page body exists, so the old monolithic API script is not required. No GitHub login or token is required.
 
 ## Modules
 
