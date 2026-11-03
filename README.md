@@ -1,6 +1,6 @@
 # Tank Trouble World Reader
 
-Version 0.8.6 — modular, read-only overlay for Tank Trouble.
+Version 0.8.7 — modular, read-only overlay for Tank Trouble.
 
 ## Install
 
@@ -18,7 +18,7 @@ The loader uses Tampermonkey's `@require` metadata to retrieve the eight modules
 - `src/geometry.js` — current Box2D tank hitboxes and collision geometry.
 - `src/world.js` — walls, crates and mines.
 - `src/physics.js` — isolated Box2D world copy for standard projectile predictions.
-- `src/projectiles.js` — bullets, missiles, laser trail paths and danger prediction. Bullet trajectories use circle-vs-rounded-rectangle wall collision, including curved corner reflections.
+- `src/projectiles.js` — reads bullets, missiles and lasers and computes danger predictions. Standard bullets use the isolated Box2D simulation; the geometric predictor remains a fallback.
 - `src/overlay.js` — canvas overlay, labels and HUD.
 - `src/app.js` — frame hook and orchestration.
 
