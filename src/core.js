@@ -4,7 +4,7 @@
     try { window.TTWR?.dispose?.(); } catch (_) {}
 
     const api = window.TTWR = {
-        version: '0.8.5',
+        version: '0.8.6',
         playerId: null,
         playerDetectionMethod: 'waiting for account data',
         game: null,
