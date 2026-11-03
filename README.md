@@ -1,15 +1,15 @@
 # Tank Trouble World Reader
 
-Version 0.8.0 — modular, read-only overlay for Tank Trouble.
+Version 0.8.1 — modular, read-only overlay for Tank Trouble.
 
 ## Install
 
-1. Disable the older monolithic World Reader userscripts in Tampermonkey.
-2. Open Tank Trouble and create a new Tampermonkey script.
-3. Paste the contents of [the module loader](loader/TankTrouble-WorldReader-Loader.user.js).
-4. Save the userscript and refresh Tank Trouble.
+1. Disable older monolithic World Reader userscripts and the previous module-loader script.
+2. Open the [module loader](loader/TankTrouble-WorldReader-Loader.user.js).
+3. Copy its contents into a new Tampermonkey userscript and save it.
+4. Refresh Tank Trouble.
 
-The loader downloads `loader/manifest.json`, then loads the seven modules in the order listed there. This repository is public, so no GitHub login or token is required.
+The loader uses Tampermonkey's `@require` metadata to retrieve the seven modules from this public repository in dependency order. This avoids injecting remote `<script>` elements into the game page, which can be blocked by the page's Content-Security-Policy. No GitHub login or token is required.
 
 ## Modules
 
@@ -24,7 +24,7 @@ The loader downloads `loader/manifest.json`, then loads the seven modules in the
 ## Notes
 
 - No keyboard hooks, key tests or input-state interception are used.
-- Player identification uses the account/active-player matching method retained from version 0.6.0.
+- Player identification uses account/active-player matching.
 - Hitboxes are calculated from the live Box2D body and transformed with the current Phaser parent matrix.
 - Missile paths are intentionally short and refreshed each game frame because a missile's direction can change while it is in flight.
 - Laser trails are read from the game's own `laserGroup` line-point arrays.
