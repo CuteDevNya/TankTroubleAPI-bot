@@ -12,7 +12,7 @@
 (async () => {
     'use strict';
 
-    const BASE = 'https://raw.githubusercontent.com/CuteDevNya/TankApiChat/main/';
+    const BASE = 'https://raw.githubusercontent.com/CuteDevNya/TankTroubleAPI-bot/main/';
     const MARKER = '__TTWR_MODULE_LOADER_080__';
     if (window[MARKER]) return;
     window[MARKER] = true;
