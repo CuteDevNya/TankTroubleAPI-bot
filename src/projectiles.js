@@ -159,42 +159,114 @@
         });
     }
 
-    function rayAabb(x, y, dx, dy, maxDistance, wall, radius) {
-        const minX = wall.x - radius;
-        const maxX = wall.x + wall.w + radius;
-        const minY = wall.y - radius;
-        const maxY = wall.y + wall.h + radius;
-        let nearX = -Infinity;
-        let farX = Infinity;
-        let nearY = -Infinity;
-        let farY = Infinity;
+    // Sweep a circular projectile against an axis-aligned wall rectangle.
+    // The collision boundary is a rounded rectangle: straight face segments
+    // plus four circular corner arcs. This is the exact Minkowski sum of the
+    // wall rectangle and the projectile circle.
+    function rayCircleAabb(x, y, dx, dy, maxDistance, wall, radius) {
+        const left = Number(wall.x);
+        const top = Number(wall.y);
+        const right = left + Number(wall.w);
+        const bottom = top + Number(wall.h);
+        const r = Math.max(0, Number(radius) || 0);
+        const minDistance = 0.02;
+        const tolerance = 1e-7;
+        let closest = null;
 
-        if (Math.abs(dx) < 1e-9) {
-            if (x < minX || x > maxX) return null;
-        } else {
-            const a = (minX - x) / dx;
-            const b = (maxX - x) / dx;
-            nearX = Math.min(a, b);
-            farX = Math.max(a, b);
+        if (![left, top, right, bottom, x, y, dx, dy, maxDistance].every(Number.isFinite) ||
+            maxDistance <= minDistance) {
+            return null;
         }
 
-        if (Math.abs(dy) < 1e-9) {
-            if (y < minY || y > maxY) return null;
-        } else {
-            const a = (minY - y) / dy;
-            const b = (maxY - y) / dy;
-            nearY = Math.min(a, b);
-            farY = Math.max(a, b);
+        function consider(distance, normalX, normalY, feature) {
+            if (!Number.isFinite(distance) ||
+                distance <= minDistance ||
+                distance > maxDistance) return;
+
+            const normalLength = Math.hypot(normalX, normalY);
+            if (normalLength < 1e-9) return;
+            normalX /= normalLength;
+            normalY /= normalLength;
+
+            // A collision only changes the path while the projectile moves
+            // into the surface. Tangential or separating contacts are ignored.
+            if (dx * normalX + dy * normalY >= -1e-8) return;
+
+            if (!closest || distance < closest.distance) {
+                closest = {
+                    distance,
+                    normal: { x: normalX, y: normalY },
+                    feature
+                };
+            }
         }
 
-        const entry = Math.max(nearX, nearY);
-        const exit = Math.min(farX, farY);
-        if (entry > exit || exit < 0 || entry < 0.5 || entry > maxDistance) return null;
+        // Four straight faces. Their valid spans stop at the original
+        // rectangle corners; the round corner arcs are checked separately.
+        if (dx > 1e-10) {
+            const distance = (left - r - x) / dx;
+            const hitY = y + dy * distance;
+            if (hitY >= top - tolerance && hitY <= bottom + tolerance) {
+                consider(distance, -1, 0, 'left');
+            }
+        } else if (dx < -1e-10) {
+            const distance = (right + r - x) / dx;
+            const hitY = y + dy * distance;
+            if (hitY >= top - tolerance && hitY <= bottom + tolerance) {
+                consider(distance, 1, 0, 'right');
+            }
+        }
 
-        const normal = nearX > nearY
-            ? { x: dx > 0 ? -1 : 1, y: 0 }
-            : { x: 0, y: dy > 0 ? -1 : 1 };
-        return { distance: entry, normal };
+        if (dy > 1e-10) {
+            const distance = (top - r - y) / dy;
+            const hitX = x + dx * distance;
+            if (hitX >= left - tolerance && hitX <= right + tolerance) {
+                consider(distance, 0, -1, 'top');
+            }
+        } else if (dy < -1e-10) {
+            const distance = (bottom + r - y) / dy;
+            const hitX = x + dx * distance;
+            if (hitX >= left - tolerance && hitX <= right + tolerance) {
+                consider(distance, 0, 1, 'bottom');
+            }
+        }
+
+        // Rounded corners: solve |position + direction * t - corner| = radius.
+        // Restrict each circle to its outer quadrant so only the quarter-circle
+        // belonging to this rectangle corner can produce a collision.
+        if (r > 0) {
+            const corners = [
+                { x: left,  y: top,    sx: -1, sy: -1, name: 'top-left' },
+                { x: right, y: top,    sx: 1,  sy: -1, name: 'top-right' },
+                { x: left,  y: bottom, sx: -1, sy: 1,  name: 'bottom-left' },
+                { x: right, y: bottom, sx: 1,  sy: 1,  name: 'bottom-right' }
+            ];
+
+            for (const corner of corners) {
+                const mx = x - corner.x;
+                const my = y - corner.y;
+                const projected = mx * dx + my * dy;
+                const constant = mx * mx + my * my - r * r;
+                const discriminant = projected * projected - constant;
+                if (discriminant < -tolerance) continue;
+
+                const distance = -projected - Math.sqrt(Math.max(0, discriminant));
+                if (distance <= minDistance || distance > maxDistance) continue;
+
+                const hitX = x + dx * distance;
+                const hitY = y + dy * distance;
+                if ((hitX - corner.x) * corner.sx < -tolerance ||
+                    (hitY - corner.y) * corner.sy < -tolerance) {
+                    continue;
+                }
+
+                const normalX = (hitX - corner.x) / r;
+                const normalY = (hitY - corner.y) / r;
+                consider(distance, normalX, normalY, corner.name);
+            }
+        }
+
+        return closest;
     }
 
     function traceProjectile(projectile, walls) {
@@ -232,7 +304,7 @@
             let closest = null;
 
             for (const wall of walls) {
-                const hit = rayAabb(
+                const hit = rayCircleAabb(
                     x, y, dx, dy,
                     remainingDistance,
                     wall,
@@ -266,13 +338,18 @@
 
             bouncePoints.push({ x, y });
             if (bounce >= maxBounces) break;
-            if (closest.normal.x) vx = -vx;
-            if (closest.normal.y) vy = -vy;
+            // Reflect against the actual contact normal. At a rounded corner
+            // the normal is diagonal, so both velocity components may change.
+            const normalVelocity = vx * closest.normal.x + vy * closest.normal.y;
+            vx -= 2 * normalVelocity * closest.normal.x;
+            vy -= 2 * normalVelocity * closest.normal.y;
 
-            const epsilon = 0.75;
+            const epsilon = 0.35;
             const reflectedSpeed = Math.hypot(vx, vy);
-            x += vx / reflectedSpeed * epsilon;
-            y += vy / reflectedSpeed * epsilon;
+            // Move out of the contact surface along its normal. This avoids an
+            // immediate duplicate hit without biasing the reflected direction.
+            x += closest.normal.x * epsilon;
+            y += closest.normal.y * epsilon;
             remainingDistance -= epsilon;
             elapsed += epsilon / reflectedSpeed;
         }

@@ -57,7 +57,7 @@
         });
 
         const title = document.createElement('div');
-        title.textContent = 'TANK TROUBLE / WORLD READER 0.8.3';
+        title.textContent = 'TANK TROUBLE / WORLD READER 0.8.4';
         Object.assign(title.style, {
             fontWeight: '700',
             fontSize: '11px',
