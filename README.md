@@ -1,6 +1,6 @@
 # Tank Trouble World Reader
 
-Version 0.8.7 — modular, read-only overlay for Tank Trouble.
+Version 0.8.8 — modular, read-only overlay for Tank Trouble.
 
 ## Install
 
@@ -29,7 +29,7 @@ The loader uses Tampermonkey's `@require` metadata to retrieve the eight modules
 - Hitboxes are calculated from the live Box2D body and transformed with the current Phaser parent matrix.
 - Missile paths are intentionally short and refreshed each game frame because a missile's direction can change while it is in flight.
 - Laser trails are read from the game's own `laserGroup` line-point arrays.
-- Standard bullet predictions are stepped in a private Box2D world copied from the live maze fixtures. The live game world is never stepped or modified by the predictor.
+- Standard bullet predictions are stepped in a private Box2D world copied from the live maze fixtures. The player's current Box2D body is also cloned, so imminent direct hits are detected by Box2D contacts rather than only by an approximate polygon-distance check. The live game world is never stepped or modified by the predictor.
 - The script is read-only. It does not send controls or change game state.
 
 ## Repository

@@ -179,6 +179,29 @@
         return targetBody;
     }
 
+    function isTouchingBody(body, targetBody) {
+        if (!body || !targetBody) return false;
+
+        let edge = body.GetContactList?.() || body.m_contactList || null;
+        let guard = 0;
+        while (edge && guard++ < 128) {
+            const otherBody = edge.other || edge.m_other || null;
+            const contact = edge.contact || edge.m_contact || null;
+            let touching = false;
+
+            try {
+                touching = Boolean(contact?.IsTouching?.());
+            } catch (_) {
+                touching = Boolean(Number(contact?.m_flags) & 0x0002);
+            }
+
+            if (otherBody === targetBody && touching) return true;
+            edge = edge.next || edge.m_next || null;
+        }
+
+        return false;
+    }
+
     function buildWorldCopy(sourceWorld, sourceBodies) {
         const gravity = sourceWorld.GetGravity?.() ||
             sourceWorld.m_gravity || { x: 0, y: 0 };
@@ -269,7 +292,7 @@
         );
     }
 
-    function simulateProjectiles(sourceWorld, projectiles) {
+    function simulateProjectiles(sourceWorld, projectiles, ownTankBody = null) {
         if (!sourceWorld || typeof sourceWorld.Step !== 'function') {
             physicsStatus = 'Fallback · Box2D world unavailable';
             return null;
@@ -292,10 +315,23 @@
         const dynamicCopies = [];
         const states = new Map();
         let worldCopy = null;
+        let ownTankCopy = null;
 
         try {
             worldCopy = getWorldCopy(sourceWorld, sourceBodies);
             const settings = readStepSettings(sourceWorld);
+
+            // Add the player's actual Box2D body to the isolated prediction
+            // world. This lets Box2D itself decide whether a bullet overlaps
+            // the real tank collision fixture, instead of relying only on a
+            // separately reconstructed polygon.
+            if (ownTankBody && sourceBodies.includes(ownTankBody) === false) {
+                ownTankCopy = copyBody(ownTankBody, worldCopy);
+                dynamicCopies.push(ownTankCopy);
+            } else if (ownTankBody) {
+                ownTankCopy = copyBody(ownTankBody, worldCopy);
+                dynamicCopies.push(ownTankCopy);
+            }
 
             for (const projectile of eligible) {
                 const body = copyBody(projectile._physicsBody, worldCopy);
@@ -326,6 +362,7 @@
                         api.CONFIG.dangerHorizonSeconds,
                         projectile.timeLeft
                     ),
+                    tankImpact: null,
                     done: false
                 });
             }
@@ -348,6 +385,37 @@
 
                 for (const state of states.values()) {
                     if (state.done) continue;
+
+                    // Test the exact Box2D contact before classifying any
+                    // velocity change as a wall bounce.
+                    if (ownTankCopy && isTouchingBody(state.body, ownTankCopy)) {
+                        const position = bodyPosition(state.body);
+                        if (position) {
+                            const point = toScreenPoint(
+                                state.projectile._transformMatrix,
+                                position
+                            );
+                            const impactTime = Math.min(elapsed, state.duration);
+                            state.segments.push({
+                                x1: state.segmentStart.x,
+                                y1: state.segmentStart.y,
+                                x2: point.x,
+                                y2: point.y,
+                                startTime: state.segmentStartTime,
+                                endTime: impactTime,
+                                bounceAtEnd: false
+                            });
+                            state.tankImpact = {
+                                time: impactTime,
+                                x: point.x,
+                                y: point.y,
+                                source: 'box2d-contact'
+                            };
+                        }
+                        state.done = true;
+                        state.previousVelocity = bodyVelocity(state.body);
+                        continue;
+                    }
 
                     const velocity = bodyVelocity(state.body);
                     const turn = directionChange(state.previousVelocity, velocity);
@@ -427,11 +495,13 @@
                 predictions[state.projectile.id] = {
                     segments: state.segments,
                     bouncePoints: state.bouncePoints,
-                    source: 'box2d-clone'
+                    source: 'box2d-clone',
+                    tankImpact: state.tankImpact
                 };
             }
 
-            physicsStatus = 'Box2D simulation · ' + cachedStaticCount + ' maze bodies';
+            physicsStatus = 'Box2D simulation · ' + cachedStaticCount +
+                ' maze bodies' + (ownTankCopy ? ' · player collision enabled' : ' · no player body');
             lastError = '';
             return predictions;
         } catch (error) {

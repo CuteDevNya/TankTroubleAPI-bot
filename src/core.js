@@ -4,7 +4,7 @@
     try { window.TTWR?.dispose?.(); } catch (_) {}
 
     const api = window.TTWR = {
-        version: '0.8.7',
+        version: '0.8.8',
         playerId: null,
         playerDetectionMethod: 'waiting for account data',
         game: null,
@@ -161,12 +161,18 @@
     api.getPhysicsTank = (state, playerId) => {
         const controller = state?.gameController;
         const roundController = controller?.roundController;
-        return [
+        const candidates = [
             controller?.gameMode?.tanks?.[playerId],
             roundController?.getTank?.(playerId),
             roundController?.model?.getTank?.(playerId),
             roundController?.model?.tanks?.[playerId]
-        ].find(Boolean) || {};
+        ].filter(Boolean);
+
+        // Prefer the actual physics-backed tank, not a wrapper/model object
+        // that happens to exist but has no Box2D body.
+        return candidates.find(tank => tank?.b2dBody) ||
+            candidates.find(tank => tank?.roundModel?.tanks?.[playerId]?.b2dBody) ||
+            candidates[0] || {};
     };
 
     api.getRoundModel = state => {

@@ -425,14 +425,27 @@
                 projectile.stopped) continue;
 
             let earliest = null;
+            const directImpact = projectile.prediction?.tankImpact;
+            if (directImpact) {
+                earliest = {
+                    projectileId: projectile.id,
+                    shooterId: projectile.shooterId,
+                    impactSeconds: directImpact.time,
+                    x: directImpact.x,
+                    y: directImpact.y,
+                    kind: projectile.kind,
+                    isMine: projectile.isMine,
+                    source: directImpact.source
+                };
+            }
             for (const segment of projectile.prediction.segments) {
                 for (const hitbox of ownTank.hitboxes) {
                     if (hitbox.type !== 'polygon') continue;
-                    const radius = Number(projectile.radius) > 0
+                    const radius = (Number(projectile.radius) > 0
                         ? projectile.radius
                         : projectile.type === 0
                             ? api.CONFIG.laserRadius
-                            : api.CONFIG.bulletRadius;
+                            : api.CONFIG.bulletRadius) + 2;
                     const contact = geom().firstPolygonImpact(
                         segment, hitbox.points, radius
                     );
@@ -505,9 +518,16 @@
         const models = readProjectileModels(roundModel);
         const lasers = readLaserPaths(state, models);
         const projectiles = mapProjectiles(state, roundModel, lasers);
+        const ownTank = api.getPhysicsTank(state, api.playerId);
+        const ownTankBody = ownTank?.b2dBody ||
+            roundModel?.tanks?.[api.playerId]?.b2dBody ||
+            ownTank?.roundModel?.tanks?.[api.playerId]?.b2dBody ||
+            null;
+
         const predictions = api.modules.physics?.simulateProjectiles?.(
             roundModel?.b2dWorld,
-            projectiles
+            projectiles,
+            ownTankBody
         ) || null;
 
         for (const projectile of projectiles) {
