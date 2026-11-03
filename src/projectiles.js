@@ -56,6 +56,7 @@
         return projectileModels.map((projectile, index) => {
             const id = String(projectile?.id ?? 'projectile-' + index);
             const type = Number(projectile?.type ?? -1);
+            const physicsBody = projectile?.b2dBody || null;
             const local = {
                 x: Number(projectile?.x) * 20,
                 y: Number(projectile?.y) * 20
@@ -102,6 +103,26 @@
                 }
             }
 
+            const transformMatrix = display?.parent?.worldTransform ||
+                (type === 3
+                    ? state?.missileGroup?.worldTransform
+                    : state?.projectileGroup?.worldTransform) || null;
+
+            if (type !== 0 && physicsBody) {
+                const physicsPosition = physicsBody.GetPosition?.() ||
+                    physicsBody.m_xf?.position;
+                if (api.finite(Number(physicsPosition?.x)) &&
+                    api.finite(Number(physicsPosition?.y))) {
+                    const point = {
+                        x: Number(physicsPosition.x) * 20,
+                        y: Number(physicsPosition.y) * 20
+                    };
+                    position = transformMatrix
+                        ? api.transformPoint(transformMatrix, point)
+                        : point;
+                }
+            }
+
             if (!position && display && api.finite(local.x) && api.finite(local.y)) {
                 position = api.transformDisplayPoint(display, local, false);
             }
@@ -118,13 +139,41 @@
                 }
             }
 
-            const localVx = Number(projectile?.speedX) * 20;
-            const localVy = Number(projectile?.speedY) * 20;
-            const velocity = api.transformVector(display?.parent?.worldTransform, {
-                x: localVx,
-                y: localVy
-            });
+            const modelVelocity = {
+                x: Number(projectile?.speedX) * 20,
+                y: Number(projectile?.speedY) * 20
+            };
+            const bodyVelocity = physicsBody?.GetLinearVelocity?.() ||
+                physicsBody?.m_linearVelocity;
+            const localVelocity = bodyVelocity &&
+                api.finite(Number(bodyVelocity.x)) &&
+                api.finite(Number(bodyVelocity.y))
+                ? {
+                    x: Number(bodyVelocity.x) * 20,
+                    y: Number(bodyVelocity.y) * 20
+                }
+                : modelVelocity;
+            const velocity = api.transformVector(
+                transformMatrix || display?.parent?.worldTransform,
+                localVelocity
+            );
             const speed = Math.hypot(velocity.x, velocity.y);
+            const fixture = physicsBody?.GetFixtureList?.() ||
+                physicsBody?.m_fixtureList || null;
+            const shape = fixture?.GetShape?.() || fixture?.m_shape || null;
+            let radius = null;
+            try {
+                const shapeRadius = Number(shape?.GetRadius?.() ?? shape?.m_radius);
+                if (Number.isFinite(shapeRadius) && shapeRadius > 0) {
+                    const matrix = transformMatrix || display?.parent?.worldTransform;
+                    const scaleX = matrix ? Math.hypot(matrix.a, matrix.b) : 1;
+                    const scaleY = matrix ? Math.hypot(matrix.c, matrix.d) : 1;
+                    radius = shapeRadius * 20 * (scaleX + scaleY) / 2;
+                }
+            } catch (_) {}
+            if (type === 0) radius = api.CONFIG.laserRadius;
+            if (!(radius > 0)) radius = api.CONFIG.bulletRadius;
+
             const bouncesDone = Array.isArray(projectile?.bounces)
                 ? projectile.bounces.length
                 : 0;
@@ -146,6 +195,9 @@
                 vx: velocity.x,
                 vy: velocity.y,
                 speed,
+                radius,
+                _physicsBody: physicsBody,
+                _transformMatrix: transformMatrix || display?.parent?.worldTransform || null,
                 positionValid: Boolean(position &&
                     api.finite(position.x) && api.finite(position.y)),
                 spriteMatchDistance: matchDistance,
@@ -308,9 +360,11 @@
                     x, y, dx, dy,
                     remainingDistance,
                     wall,
-                    projectile.type === 0
-                        ? api.CONFIG.laserRadius
-                        : api.CONFIG.bulletRadius
+                    Number(projectile.radius) > 0
+                        ? projectile.radius
+                        : projectile.type === 0
+                            ? api.CONFIG.laserRadius
+                            : api.CONFIG.bulletRadius
                 );
                 if (hit && (!closest || hit.distance < closest.distance)) {
                     closest = hit;
@@ -363,7 +417,8 @@
         const dangers = [];
 
         for (const projectile of snapshot.projectiles) {
-            projectile.prediction = traceProjectile(projectile, snapshot.walls);
+            projectile.prediction = projectile.prediction ||
+                traceProjectile(projectile, snapshot.walls);
             projectile.isThreat = false;
             if ((projectile.isMine && !projectile.deadlyToOwner) ||
                 !projectile.positionValid ||
@@ -373,9 +428,11 @@
             for (const segment of projectile.prediction.segments) {
                 for (const hitbox of ownTank.hitboxes) {
                     if (hitbox.type !== 'polygon') continue;
-                    const radius = projectile.type === 0
-                        ? api.CONFIG.laserRadius
-                        : api.CONFIG.bulletRadius;
+                    const radius = Number(projectile.radius) > 0
+                        ? projectile.radius
+                        : projectile.type === 0
+                            ? api.CONFIG.laserRadius
+                            : api.CONFIG.bulletRadius;
                     const contact = geom().firstPolygonImpact(
                         segment, hitbox.points, radius
                     );
@@ -448,6 +505,19 @@
         const models = readProjectileModels(roundModel);
         const lasers = readLaserPaths(state, models);
         const projectiles = mapProjectiles(state, roundModel, lasers);
+        const predictions = api.modules.physics?.simulateProjectiles?.(
+            roundModel?.b2dWorld,
+            projectiles
+        ) || null;
+
+        for (const projectile of projectiles) {
+            if (predictions?.[projectile.id]) {
+                projectile.prediction = predictions[projectile.id];
+            }
+            delete projectile._physicsBody;
+            delete projectile._transformMatrix;
+        }
+
         return { projectiles, lasers };
     }
 

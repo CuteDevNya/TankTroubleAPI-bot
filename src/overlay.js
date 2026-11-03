@@ -57,7 +57,7 @@
         });
 
         const title = document.createElement('div');
-        title.textContent = 'TANK TROUBLE / WORLD READER 0.8.4';
+        title.textContent = 'TANK TROUBLE / WORLD READER 0.8.5';
         Object.assign(title.style, {
             fontWeight: '700',
             fontSize: '11px',
@@ -153,6 +153,7 @@
             'CRATES:      ' + snapshot.crates.length,
             'MINES:       ' + snapshot.mines.length,
             'UPDATE:      ' + snapshot.readMs.toFixed(1) + ' ms',
+            'PHYSICS:     ' + (api.modules.physics?.getStatus?.() || 'not loaded'),
             'DANGER:      ' + (nearestDanger
                 ? nearestDanger.kind.toUpperCase() + ' IN ' +
                     nearestDanger.impactSeconds.toFixed(2) + 's'
