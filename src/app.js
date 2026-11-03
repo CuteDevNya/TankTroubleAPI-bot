@@ -77,7 +77,15 @@
         });
 
         prototype.update = function(...args) {
+            // Phaser's main game instance is not necessarily exposed through a
+            // global variable. Identify it from the instance executing update(),
+            // matching the working 0.6.0 discovery method.
+            if (!api.game && api.isMainGame(this)) {
+                api.attachGame(this);
+            }
+
             const result = originalUpdate.apply(this, args);
+
             if (api.game === this) {
                 try { this.stage?.updateTransform?.(); } catch (_) {}
                 tick();
