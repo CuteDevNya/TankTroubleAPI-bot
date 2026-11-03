@@ -1,0 +1,12 @@
+{
+  "version": "0.8.0",
+  "modules": [
+    "src/core.js",
+    "src/identity.js",
+    "src/geometry.js",
+    "src/world.js",
+    "src/projectiles.js",
+    "src/overlay.js",
+    "src/app.js"
+  ]
+}
